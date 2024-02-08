@@ -29,6 +29,13 @@ pub enum TransactionType {
         account_id: String,
         list_of_notes: Vec<String>,
     },
+    #[clap(about = "Create a limit order note consumable by anyone who can fulfill it.")]
+    LimitOrder {
+        asset_selling_faucet_id: String,
+        asset_buying_faucet_id: String,
+        amount_selling: u64,
+        amount_buying: u64,
+    },
 }
 
 impl TryInto<TransactionTemplate> for &TransactionType {
@@ -36,16 +43,10 @@ impl TryInto<TransactionTemplate> for &TransactionType {
 
     fn try_into(self) -> Result<TransactionTemplate, Self::Error> {
         match self {
-            TransactionType::P2ID {
-                sender_account_id,
-                target_account_id,
-                faucet_id,
-                amount,
-            } => {
+            TransactionType::P2ID { sender_account_id, target_account_id, faucet_id, amount } => {
                 let faucet_id = AccountId::from_hex(faucet_id).map_err(|err| err.to_string())?;
-                let fungible_asset = FungibleAsset::new(faucet_id, *amount)
-                    .map_err(|err| err.to_string())?
-                    .into();
+                let fungible_asset =
+                    FungibleAsset::new(faucet_id, *amount).map_err(|err| err.to_string())?.into();
                 let sender_account_id =
                     AccountId::from_hex(sender_account_id).map_err(|err| err.to_string())?;
                 let target_account_id =
@@ -61,11 +62,7 @@ impl TryInto<TransactionTemplate> for &TransactionType {
             TransactionType::P2IDR => {
                 todo!()
             }
-            TransactionType::Mint {
-                faucet_id,
-                target_account_id,
-                amount,
-            } => {
+            TransactionType::Mint { faucet_id, target_account_id, amount } => {
                 let faucet_id = AccountId::from_hex(faucet_id).map_err(|err| err.to_string())?;
                 let fungible_asset =
                     FungibleAsset::new(faucet_id, *amount).map_err(|err| err.to_string())?;
@@ -77,10 +74,7 @@ impl TryInto<TransactionTemplate> for &TransactionType {
                     target_account_id,
                 })
             }
-            TransactionType::ConsumeNotes {
-                account_id,
-                list_of_notes,
-            } => {
+            TransactionType::ConsumeNotes { account_id, list_of_notes } => {
                 let list_of_notes = list_of_notes
                     .iter()
                     .map(|n| NoteId::try_from_hex(n).map_err(|err| err.to_string()))
@@ -89,6 +83,24 @@ impl TryInto<TransactionTemplate> for &TransactionType {
                 let account_id = AccountId::from_hex(account_id).map_err(|err| err.to_string())?;
 
                 Ok(TransactionTemplate::ConsumeNotes(account_id, list_of_notes))
+            }
+            TransactionType::LimitOrder {
+                asset_selling_faucet_id,
+                asset_buying_faucet_id,
+                amount_selling,
+                amount_buying,
+            } => {
+                let asset_selling_faucet_id =
+                    AccountId::from_hex(asset_selling_faucet_id).map_err(|err| err.to_string())?;
+                let asset_buying_faucet_id =
+                    AccountId::from_hex(asset_buying_faucet_id).map_err(|err| err.to_string())?;
+
+                let asset_selling = FungibleAsset::new(asset_selling_faucet_id, *amount_selling)
+                    .map_err(|err| err.to_string())?;
+                let asset_buying = FungibleAsset::new(asset_buying_faucet_id, *amount_buying)
+                    .map_err(|err| err.to_string())?;
+                println!("LIMIT ORDER: {:?} {:?}", asset_selling, asset_buying);
+                Err("Not implemented".to_string())
             }
         }
     }
@@ -122,9 +134,7 @@ impl Transaction {
 
                 info!("Executed transaction, proving and then submitting...");
 
-                client
-                    .send_transaction(transaction_execution_result)
-                    .await?
+                client.send_transaction(transaction_execution_result).await?
             }
         }
         Ok(())
@@ -159,10 +169,7 @@ where
             tx.id.to_string(),
             tx.transaction_status.to_string(),
             tx.account_id.to_string(),
-            tx.transaction_script
-                .as_ref()
-                .map(|x| x.hash().to_string())
-                .unwrap_or("-".to_string()),
+            tx.transaction_script.as_ref().map(|x| x.hash().to_string()).unwrap_or("-".to_string()),
             tx.input_note_nullifiers.len().to_string(),
             tx.output_notes.num_notes().to_string(),
         ]);
